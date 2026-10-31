@@ -1,0 +1,8 @@
+# 依赖在镜像里重装、产物在镜像里重编，本机私有的东西不进镜像
+node_modules
+dist
+.git
+.gitignore
+*.log
+.env.*.local
+README.md

@@ -1,0 +1,17 @@
+langchain_core
+langchain>=1.0
+fastapi
+langchain_openai
+pydantic
+pymupdf
+python-docx
+Levenshtein
+pypinyin
+uvicorn
+python-multipart
+gunicorn
+python-dotenv
+PyYAML
+httpx
+PyMySQL
+minio

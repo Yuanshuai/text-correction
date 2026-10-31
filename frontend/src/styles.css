@@ -1,0 +1,1493 @@
+:root {
+  --bg: #f5f7fa;
+  --panel: #ffffff;
+  --border: #e4e8ee;
+  --text: #1f2733;
+  --muted: #7a8699;
+  --primary: #2b6cff;
+  --primary-dark: #1c56d8;
+  --replace: #fff1c2;
+  --insert: #d6f5e0;
+  --insert-border: #1f9d55;
+  --delete: #ffe0e0;
+  --mk-replace: #b8730a;
+  --mk-delete: #d63b3b;
+  --mk-insert: #1a8f4d;
+  --radius: 10px;
+  --shadow: 0 1px 3px rgba(20, 35, 60, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand__logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2b6cff, #6a9bff);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand__title {
+  margin: 0;
+  font-size: 20px;
+}
+
+.brand__sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.health {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+}
+
+.health__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #bbb;
+  flex: none;
+}
+
+.health--ok .health__dot {
+  background: #2ecc71;
+}
+
+.health--degraded .health__dot {
+  background: #f0ad4e;
+}
+
+.health--error .health__dot {
+  background: #e74c3c;
+}
+
+.health__detail {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tabs__btn {
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.tabs__btn--active {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.editor__area {
+  width: 100%;
+  min-height: 200px;
+  border: 0;
+  outline: none;
+  resize: vertical;
+  padding: 16px;
+  font-size: 15px;
+  line-height: 1.8;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.editor__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: #fafbfd;
+}
+
+.editor__actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 链接纠错：一个输入框 + 一行选项，外形跟着编辑框那套走 */
+
+.linkbox {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.linkbox__label {
+  display: block;
+  padding: 14px 16px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.linkbox__input {
+  width: 100%;
+  padding: 10px 16px 16px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.linkbox__input::placeholder {
+  color: var(--muted);
+}
+
+.linkbox__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: #fafbfd;
+}
+
+.linkbox__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn--primary:not(:disabled):hover {
+  background: var(--primary-dark);
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dropzone {
+  background: var(--panel);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 36px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dropzone--active {
+  border-color: var(--primary);
+  background: #f0f6ff;
+}
+
+.dropzone--filled {
+  border-style: solid;
+}
+
+.dropzone__icon {
+  font-size: 30px;
+}
+
+.dropzone__name {
+  margin: 6px 0;
+  font-weight: 600;
+}
+
+.hidden-input {
+  display: none;
+}
+
+.options {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.option--check {
+  cursor: pointer;
+}
+
+.option__input {
+  width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.options .btn {
+  margin-left: auto;
+}
+
+.result__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.result__state--error {
+  color: #c0392b;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #cfd8e3;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.banner--warn {
+  background: #fff8e6;
+  border: 1px solid #f3d999;
+  color: #8a6d1c;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px;
+  color: #1f9d55;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.empty__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--insert);
+  color: var(--insert-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+.tag {
+  flex: none;
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.tag--replace {
+  background: var(--replace);
+  color: #8a6d1c;
+}
+
+.tag--insert {
+  background: var(--insert);
+  color: #14713c;
+}
+
+.tag--delete {
+  background: var(--delete);
+  color: #b23b3b;
+}
+
+.foot {
+  margin-top: 32px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 纠错结果页链接：文档纠错那个 tab 的第二种产出（同一个文件，出链接而不是清单） */
+.page-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.page-link__label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 纠错记录 */
+.hist__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.hist__title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.hist__head p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.hist__count {
+  flex: none;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: #eef3ff;
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.hist-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hist-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(20, 35, 60, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hist-card:hover {
+  border-color: #cfd9ee;
+  box-shadow: 0 6px 18px rgba(20, 35, 60, 0.08);
+}
+
+.hist-card__badge {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.hist-card__badge--doc {
+  background: #eef3ff;
+  color: var(--primary);
+}
+
+.hist-card__badge--text {
+  background: #eaf7f0;
+  color: var(--mk-insert);
+}
+
+.hist-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.hist-card__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hist-card__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-card__name:hover {
+  color: var(--primary);
+}
+
+.hist-card__time {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.chip {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 19px;
+  white-space: nowrap;
+}
+
+.chip--doc {
+  background: #eef3ff;
+  color: var(--primary);
+}
+
+.chip--text {
+  background: #eaf7f0;
+  color: var(--mk-insert);
+}
+
+.chip--warn {
+  background: #fff4e0;
+  color: var(--mk-replace);
+}
+
+.stat {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.stat b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sep {
+  color: #d5dbe5;
+}
+
+.hist-card__act {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn--sm {
+  padding: 5px 16px;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+/* 记录卡里的「打开」不用实心蓝：一屏好几条的时候太吵，悬停再点亮 */
+.hist-card__act .btn--sm {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--primary);
+}
+
+.hist-card__act .btn--sm:hover {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.hist-card__del {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.hist-card__del:hover {
+  color: var(--mk-delete);
+}
+
+.link {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .hist-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .hist-card__act {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ===== 结果页（#/result/<id>）===== */
+/* 整页撑满视口：下面是「整篇文档」，留一大块空白没有意义 */
+/* 整页铺满：左右两条栏直接贴边、一直铺到屏幕底部，页面里不留空边角 */
+.rp {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  background: var(--panel);
+}
+
+/* 顶栏高度：报告列要粘在它下面，所以只在这里写一次 */
+.rp {
+  --rp-bar: 63px;
+}
+
+/* PDF 阅读器模式：高度锁定一屏，阅读区自己滚，页面整体不跟着长 */
+.rp--fit {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rp--fit .rp__body {
+  min-height: 0;
+}
+
+.rp__bar {
+  flex: none;
+  position: sticky;
+  top: 0;
+  min-height: var(--rp-bar);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.rp__id {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 「忽略没存上」这类提示：贴在页头下面，别当成页面的常态 */
+.rp__notice {
+  flex: none;
+  margin: 8px 16px 0;
+}
+
+/* 上/下一个错字：键盘 ← → ↑ ↓ 走的是同一套 */
+.rp__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rp__nav-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rp__nav-btn:hover {
+  border-color: var(--primary);
+  background: rgba(43, 108, 255, 0.08);
+  color: var(--primary);
+}
+
+.rp__nav-pos {
+  min-width: 76px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f2f6fd;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rp__file {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, min(30%, 620px));
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+/* 全文：像一张纸，按正文顺序一路排下去；有改动的段落才挂段号、左侧加一道浅色记号 */
+.rp__main {
+  padding: 24px 32px 28px;
+  border: none;
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.rp__doc {
+  position: relative;
+  padding: 3px 8px;
+  border-radius: 6px;
+  scroll-margin-top: 90px;
+}
+
+/* 有改动的段落：浅浅一层底色 + 左侧一道记号，不抢正文的读感 */
+.rp__doc--hit {
+  margin: 4px 0;
+  padding: 8px 10px;
+  background: #fffbf1;
+  box-shadow: inset 2px 0 0 #f0d9a8;
+}
+
+/* 表格：纠错是一个单元格一个单元，展示时照原样拼回一张表 */
+/* 列一多的表格（物资明细那种十几列）再撑满就一字一行了，所以给个最小列宽、横向滚动 */
+.rp__tbl-wrap {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.rp__tbl {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 15px;
+  line-height: 1.9;
+  color: #4a5566;
+}
+
+.rp__tbl td {
+  padding: 6px 10px;
+  border: 1px solid #e6ebf2;
+  vertical-align: middle;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 第一行多数是表头，压一层浅底色 */
+.rp__tbl tr:first-child {
+  background: #f7f9fc;
+}
+
+.rp__tbl tr:first-child td {
+  color: #33405a;
+}
+
+/* 有改动的格子：浅底色托一下，错字本身还是只上色 */
+.rp__tbl td.rp__cell--hit {
+  background: #fffbf1;
+}
+
+.rp__text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 15px;
+  line-height: 2;
+}
+
+.rp__none,
+.rp__empty {
+  padding: 64px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+.rp__none {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.rp__empty .btn {
+  margin-top: 16px;
+}
+
+/* 结果页里的标记：同样是只上色，不加底色横线；联动时给一点点浅蓝提示 */
+.mk-rep,
+.mk-del,
+.mk-ins {
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.mk-rep { color: var(--mk-replace); }
+.mk-del { color: var(--mk-delete); }
+.mk-ins { color: var(--mk-insert); }
+
+/* 手动忽略掉的误报：正文里同样灰掉 */
+.mk-rep.is-ignored,
+.mk-del.is-ignored,
+.mk-ins.is-ignored {
+  color: #9aa5b5;
+}
+
+.mk-rep.is-active,
+.mk-del.is-active,
+.mk-ins.is-active {
+  background: rgba(43, 108, 255, 0.12);
+}
+
+/* 纠错报告：一整列淡底侧栏，跟左边的阅读区一眼就能分开。
+   min-height: 0 + overflow: hidden 是必须的：少了它，条目一多这一列会被内容撑高，
+   报告自己就滚不动了（外层整页是锁一屏的，滚动条也就不出现）。 */
+.rp__rail {
+  position: relative;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: linear-gradient(180deg, #f8fafe 0%, #f1f5fd 100%);
+}
+
+.rp__rail-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff 0%, #f3f7ff 100%);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* 排序切换器：一条浅槽里两颗小按钮，当前那颗是蓝底蓝字 */
+.rp__rail-modes {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: 999px;
+  background: #e9eff9;
+}
+
+.rp__mode {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #6b7688;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rp__mode:hover {
+  color: var(--primary);
+}
+
+.rp__mode.is-on {
+  background: rgba(43, 108, 255, 0.14);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.rp__rail-title {
+  flex: none;
+}
+
+/* 按类型看时每一类的小结行：跟着滚，滚到哪儿都知道自己在看哪一类 */
+.rp__group {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -14px 10px -16px;
+  padding: 7px 16px;
+  background: #f5f8fe;
+  border-bottom: 1px solid #e6ecf6;
+}
+
+.rp__group-name {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rp__group-note {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* 类型只用一个小圆点带出来：改=琥珀、删=红、增=绿，不占地方也不吵 */
+.rp__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.rp__dot--replace { background: var(--mk-replace); }
+.rp__dot--delete { background: var(--mk-delete); }
+.rp__dot--insert { background: var(--mk-insert); }
+
+/* 总处数是一颗实心蓝徽章：报告头里最显眼的一处颜色，别让它跟白底融在一起 */
+.rp__rail-count {
+  flex: none;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4d8bff 0%, #2b6cff 100%);
+  box-shadow: 0 2px 8px rgba(43, 108, 255, 0.3);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 忽略过误报才出现的一行：点一下只看已忽略的，再点回全部 */
+.rp__rail-filter {
+  flex: none;
+  padding: 9px 16px 0;
+}
+
+.rp__filter {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px dashed #cfd9e8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #6b7688;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.rp__filter:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.rp__filter.is-on {
+  border-style: solid;
+  border-color: rgba(43, 108, 255, 0.4);
+  background: rgba(43, 108, 255, 0.1);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* 报告自己滚：鼠标落在这一列上，滚轮滚的就是报告，不会带着左边的文档跑 */
+.rp__rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 14px 20px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: #c8d4e6 transparent;
+}
+
+/* 列底一道渐隐，提示下面还有条目没露出来 */
+.rp__rail::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 0;
+  bottom: 0;
+  height: 24px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(241, 245, 253, 0) 0%, rgba(241, 245, 253, 0.92) 100%);
+}
+
+.rp__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 13px 15px 14px 17px;
+  border: 1px solid #e6ecf6;
+  border-radius: 11px;
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(20, 35, 60, 0.06);
+  text-align: left;
+  cursor: pointer;
+  scroll-margin: 14px;
+  transition: box-shadow 0.16s ease, border-color 0.16s ease, transform 0.18s ease;
+}
+
+.rp__item:last-child {
+  margin-bottom: 0;
+}
+
+/* 选中的那一处：整张卡片往左挪一小步 + 蓝描边 + 一圈蓝光，取消选中再滑回原位。
+   它跟鼠标划过不一样——点过之后一直留着，鼠标去下一条上找的时候，
+   还能一眼看出刚刚看的是哪条。 */
+.rp__item.is-selected {
+  border-color: var(--primary);
+  transform: translateX(-8px);
+  box-shadow: 0 0 0 2px rgba(43, 108, 255, 0.2), 0 4px 14px rgba(43, 108, 255, 0.16);
+}
+
+/* 鼠标停着的卡片只轻轻抬一下，别跟选中态抢戏 */
+.rp__item:not(.is-selected):hover {
+  border-color: #d5e1f4;
+  box-shadow: 0 3px 10px rgba(20, 35, 60, 0.08);
+}
+
+.rp__item.is-selected:hover {
+  border-color: var(--primary);
+}
+
+/* 键盘 Tab 到卡片上时给个明确、好看的焦点框（鼠标点过不留圈） */
+.rp__item:focus-visible {
+  outline: 2px solid rgba(43, 108, 255, 0.55);
+  outline-offset: 2px;
+}
+
+/* 卡片上的「忽略 / 恢复」：误报点一下就作废，随时能点回来 */
+.rp__act {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #f2f5fa;
+  color: #7c8798;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.rp__act:hover {
+  border-color: #cfdcef;
+  background: #e8eff9;
+  color: var(--text);
+}
+
+/* 平时淡一点，鼠标回到卡片上再实起来：一条条排下来不至于满屏小按钮 */
+.rp__act {
+  opacity: 0.8;
+}
+
+.rp__item:hover .rp__act,
+.rp__act.is-restore {
+  opacity: 1;
+}
+
+/* 已经忽略的那一条：按钮变成蓝的「恢复」，点一下就能救回来 */
+.rp__act.is-restore {
+  border-color: rgba(43, 108, 255, 0.35);
+  background: rgba(43, 108, 255, 0.1);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.rp__act.is-restore:hover {
+  background: rgba(43, 108, 255, 0.18);
+}
+
+/* ── 已忽略的卡片：整条退到后面去（灰掉，但不占位变化，方便恢复） ── */
+.rp__item.is-ignored {
+  border-color: #e9edf4;
+  background: #fbfcfe;
+  box-shadow: none;
+}
+
+.rp__item.is-ignored .rp__val,
+.rp__item.is-ignored .rp__arrow {
+  color: #8b95a6;
+}
+
+.rp__item.is-ignored .rp__val--after,
+.rp__item.is-ignored .rp__ctx-hit,
+.rp__item.is-ignored .rp__ctx-hit--replace,
+.rp__item.is-ignored .rp__ctx-hit--delete,
+.rp__item.is-ignored .rp__ctx-hit--insert {
+  color: #8b95a6;
+}
+
+.rp__item.is-ignored .rp__ctx {
+  color: #a3adbc;
+}
+
+.rp__item.is-ignored .rp__ctx-caret {
+  background: #b9c3d1;
+}
+
+/* 第一行：类型标签 + 改动 */
+.rp__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 第二行：改动所在的原句。小一号、灰一档，是配角但不能没有；最多两行，
+   结尾省略号，免得一条比一条高、一列看下来没节奏。 */
+.rp__ctx {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: #6b7688;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+/* 原句里被改动的那几个字跟上面一样用类型色，一眼能对上 */
+.rp__ctx-hit {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.rp__ctx-hit--replace { color: var(--mk-replace); }
+.rp__ctx-hit--delete { color: var(--mk-delete); }
+.rp__ctx-hit--insert { color: var(--mk-insert); }
+
+/* 增字没有原字可标，就在该插的地方竖一道细线 */
+.rp__ctx-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin: 0 1px;
+  vertical-align: -0.14em;
+  background: var(--mk-insert);
+}
+
+/* 「改后」用类型色（改=琥珀、删=红、增=绿），扫一眼就知道改成了什么；原文保持深色 */
+.rp__val--after {
+  font-weight: 600;
+}
+
+.rp__item--replace .rp__val--after { color: var(--mk-replace); }
+.rp__item--delete .rp__val--after { color: var(--mk-delete); }
+.rp__item--insert .rp__val--after { color: var(--mk-insert); }
+
+/* 报告可能很长：滚动条做细一点，别抢正文的戏 */
+.rp__rail-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.rp__rail-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: #c8d4e6;
+}
+
+.rp__rail-list::-webkit-scrollbar-thumb:hover {
+  background-color: #aebfd8;
+}
+
+.rp__rail-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 报告里的「原文 -> 改后」是这一页的主角：字号跟正文一个量级，深色、加粗 */
+.rp__pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.rp__val {
+  color: var(--text);
+}
+
+.rp__arrow {
+  color: #b3bdcd;
+  font-weight: 400;
+}
+
+/* 没有托管 PDF 的兜底渲染整页都在滚，报告列跟着钉在屏幕右侧，滚多远都看得见 */
+.rp:not(.rp--fit) .rp__rail {
+  position: sticky;
+  top: var(--rp-bar);
+  align-self: start;
+  height: calc(100vh - var(--rp-bar));
+}
+
+@media (max-width: 720px) {
+  .rp__body {
+    grid-template-columns: 1fr;
+  }
+
+  /* 单列时不再锁一屏，整页照样滚；页数浮层钉在屏幕角上 */
+  .rp--fit {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .rp__rail {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* 单列时报告列在正文下面，跟着滚就行，不粘 */
+  .rp:not(.rp--fit) .rp__rail {
+    position: static;
+    height: auto;
+  }
+}
+
+/* ===== 结果页的 PDF 阅读器（原文件什么样就什么样，改动直接框在原字上）===== */
+.rpv {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* 页面本身是滚动的：上下滑看全文，‹ › 或 ← → ↑ ↓ 直接跳到上/下一处 */
+.rpv__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  overflow: auto;
+  padding: 0 0 56px;
+}
+
+/* 阅读器左下角：当前页 / 共几页，点箭头直接翻页 */
+.rpv__foot {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid rgba(23, 33, 48, 0.12);
+  border-radius: 10px;
+  background: rgba(23, 33, 48, 0.13);
+  box-shadow: 0 1px 4px rgba(20, 35, 60, 0.1);
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* 平时几乎透明，鼠标移上来（或键盘聚焦）才显出来 */
+.rpv__foot:hover,
+.rpv__foot:focus-within {
+  border-color: transparent;
+  background: rgba(23, 33, 48, 0.72);
+  box-shadow: 0 3px 12px rgba(15, 25, 40, 0.26);
+  backdrop-filter: blur(3px);
+}
+
+.rpv__pg {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(23, 33, 48, 0.55);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.rpv__foot:hover .rpv__pg:not(:disabled),
+.rpv__foot:focus-within .rpv__pg:not(:disabled) {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.rpv__pg:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.rpv__pg:disabled {
+  color: rgba(23, 33, 48, 0.26);
+  cursor: default;
+}
+
+.rpv__foot:hover .rpv__pg:disabled,
+.rpv__foot:focus-within .rpv__pg:disabled {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.rpv__pg-no {
+  min-width: 74px;
+  margin-right: 6px;
+  color: rgba(23, 33, 48, 0.62);
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.18s ease;
+}
+
+.rpv__foot:hover .rpv__pg-no,
+.rpv__foot:focus-within .rpv__pg-no {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.rpv__page {
+  position: relative;
+  flex: none;
+  background: #fff;
+  box-shadow: 0 0 0 1px #e6eaf1, 0 2px 8px rgba(20, 35, 60, 0.07);
+}
+
+.rpv__canvas {
+  display: block;
+}
+
+.rpv__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.rpv__tip {
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* 只框改到的那几个字，不给整段上底色；删字是红框（不用删除线），增字画一根细竖线 */
+.rpv__hl {
+  position: absolute;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.rpv__hl--replace {
+  background: rgba(184, 115, 10, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(184, 115, 10, 0.7);
+}
+
+.rpv__hl--delete {
+  background: rgba(214, 59, 59, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(214, 59, 59, 0.65);
+}
+
+.rpv__hl--insert {
+  background: var(--mk-insert);
+  border-radius: 1px;
+}
+
+/* 手动忽略掉的误报：框还在（知道它标过哪儿），但换成灰虚线，不再是「要改」的样子 */
+.rpv__hl.is-ignored {
+  background: rgba(140, 152, 170, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(140, 152, 170, 0.75);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(140, 152, 170, 0.22) 0,
+    rgba(140, 152, 170, 0.22) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+/* 当前这一处：底色仍按类型走（改=琥珀、删=红），外面再圈一道蓝，一眼看出跳到哪儿了 */
+.rpv__hl.is-active {
+  outline: 2px solid var(--primary);
+  outline-offset: 1.5px;
+}
+
+.rpv__hl--replace.is-active {
+  background: rgba(184, 115, 10, 0.46);
+  box-shadow: inset 0 0 0 1.5px #b8730a;
+}
+
+.rpv__hl--delete.is-active {
+  background: rgba(214, 59, 59, 0.42);
+  box-shadow: inset 0 0 0 1.5px #d63b3b;
+}
+
+/* 单列窄屏：阅读区不再锁一屏，浮层要是还跟着阅读区跑就会掉到文档最底下去，所以钉在屏幕上 */
+@media (max-width: 720px) {
+  .rpv__foot {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+  }
+}

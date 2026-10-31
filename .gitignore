@@ -1,0 +1,23 @@
+.env
+.superpowers/
+.DS_Store
+__pycache__/
+*.pyc
+.idea/
+.venv/
+
+# 测试数据与报告（不提交）
+tests/reports/
+test.txt
+examples/
+
+# 运行期调试日志（不提交）
+debug_logs/
+
+# 离线安装包的产物（几个 G，不入库）
+deploy/dist/
+# 各环境的成品：docker-compose.yml + 填好的 .env（含模型口令，不入库）
+deploy/test-env/
+deploy/prod-env/
+# 数据卷（.env 里指到 ./data/* 时落这儿）
+deploy/*/data/

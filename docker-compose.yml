@@ -1,0 +1,115 @@
+# 一套完整的纠错服务，一条命令起全：
+#   原文文件 → MinIO（对象存储）   纠错记录 → MySQL   文档转换 → Gotenberg
+#   后端 correction   +   前端 web
+#
+#   cp .env.example .env    # 填上模型凭据（OPEN_AI_*，跟单跑一样）
+#   docker compose up -d
+#   浏览器打开 http://localhost:18080
+#
+# 本文件里 environment 的优先级高于 .env，也就是说容器之间互访一律走 compose 的服务名，
+# 不用为了跑 compose 去改 .env 里的地址。
+name: text-correction
+
+services:
+  mysql:
+    # 拉不动 Docker Hub 时，在 .env 里把它指到国内镜像源的同一份镜像（见 .env.example）
+    image: ${MYSQL_IMAGE:-mysql:8.0}
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: correction
+      MYSQL_USER: correction
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-correction123}
+    # 数据落在哪儿：留空用 Docker 命名卷（text-correction_mysql-data）；
+    # 在 .env 里指到一个目录（如 ./data/mysql）就存那儿 —— 备份、迁移、整个目录打包搬走都方便。
+    volumes:
+      - ${MYSQL_DATA_DIR:-mysql-data}:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-correction}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-correction123}
+    # 不对外开端口：同一个网络里的后端按服务名连它。本机要看控制台，用 docker-compose.override.yml
+    # 同上：.env 里指到 ./data/minio 就让原文跟着部署目录走
+    volumes:
+      - ${MINIO_DATA_DIR:-minio-data}:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  gotenberg:
+    image: ${GOTENBERG_IMAGE:-gotenberg/gotenberg:8}
+    restart: unless-stopped
+    # Word/Excel/PPT 转 PDF。LibreOffice 闲一会儿会自己退出，重启太勤会让第一份文档重新等它冷启动
+    command: gotenberg --api-timeout=120s --libreoffice-restart-after=200
+
+  correction:
+    # 镜像名跟单跑时用的 tag 一致：compose 构建出来的就是那份，不另起一个名字。
+    # 服务器上只放一个 yml + 一个 env 时，在 .env 里把 CORRECTION_IMAGE 指到镜像仓库
+    # （见 README「服务器部署」那节），拉下来直接用，不带源码也能跑。
+    # CI 推上去的是我们自己的那组 tag：text-correction:standalone-x86 / -arm64（前端是 :standalone-web-*）；
+    # 客户那边的 legacy-* / legacy-* 是另一组，这个 yml 不会用到，也不会覆盖它们。
+    image: ${CORRECTION_IMAGE:-text-correction:latest}
+    restart: unless-stopped
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      gotenberg:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      # 容器之间一律按服务名互访，盖掉 .env 里可能写的本机地址
+      CONVERT_SERVER: http://gotenberg:3000
+      # MYSQL_DSN 留空是有意的：免得 .env 里的 DSN 盖掉下面这套 compose 内的地址
+      MYSQL_DSN: ""
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: correction
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-correction123}
+      MYSQL_DATABASE: correction
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-correction}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-correction123}
+      S3_BUCKET: ${S3_BUCKET:-correction}
+      # 让浏览器直连对象存储（后端一个字节都不搬）：填浏览器能访问到的地址，
+      # 比如 http://localhost:9000 或 http://10.0.0.10:9000。
+      # 留空就由后端转发原文——任何网络环境都能跑，只是字节过一趟后端。
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-}
+    # 不对外开端口：前端 nginx 在同一个网络里按服务名连它（http://correction:32546）
+
+  web:
+    # 前端是独立镜像：CI 推的是 text-correction:standalone-web-x86 / :standalone-web-arm64
+    image: ${CORRECTION_WEB_IMAGE:-text-correction-web:latest}
+    restart: unless-stopped
+    build: ./frontend
+    depends_on:
+      - correction
+    environment:
+      CORRECTION_UPSTREAM: http://correction:32546
+      # 反代等后端回话最多多久：要比「等解析结果」（PARSE2JSON_MAX_WAIT_MIN，默认 60 分钟）
+      # 加纠错那段时间更宽裕，不然大文档会被 nginx 掐成 504。默认 2 小时。
+      PROXY_TIMEOUT: ${PROXY_TIMEOUT:-7200s}
+    # 整套服务只有这一个对外端口：用户页面、结果页、对外接口都走它
+    ports:
+      - "${FRONTEND_PORT:-18080}:80"
+
+volumes:
+  mysql-data:
+  minio-data:

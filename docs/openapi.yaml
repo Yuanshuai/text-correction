@@ -1,0 +1,1360 @@
+openapi: 3.0.3
+info:
+  title: 文本纠错服务
+  description: |
+    基于 LLM 的中文文本纠错 API，兼容旧版 Flask 接口返回格式。
+
+    ## 功能说明
+    - 检测并纠正错别字、同音字、近音字（平翘舌不分、前后鼻音不分）、漏写的字等明显错误
+    - 仅去除文本首尾空白，中间空格保留，不臆造填写
+    - 返回 `position` / `wrong_ids` / `errors` 供前端高亮标注
+
+    ## 通用约定
+    - 成功时 HTTP 状态码为 `200`，业务码 `code=0`
+    - 请求体参数校验失败（如缺少 `content`）返回 HTTP `422`，响应体为 `{"detail": "..."}`
+    - 文档/合同处理失败返回 HTTP `500`
+    - 请求头可传 `X-Request-ID` 用于链路追踪，响应头会回传
+
+        ## 环境变量（服务端）
+
+    模型网关统一走 OpenAI 兼容接口 + Bearer token：
+    | 变量 | 必填 |
+    |------|------|
+    | `OPEN_AI_MODEL` | 是 |
+    | `OPEN_BASE_URL` | 是 |
+    | `OPEN_AI_TOKEN` | 是 |
+
+    ### 公共参数
+    | 变量 | 默认 | 说明 |
+    |------|------|------|
+    | `LOG_LEVEL` | INFO | 日志级别 |
+    | `MAX_TEXT_LENGTH` | 3000 | 一份 000.txt 的字数上限，更长的文本按句末切分后分片并发纠错 |
+    | `MAX_CONCURRENCY` | 10 | LLM 并发数 |
+    | `LLM_TIMEOUT` | 60 | LLM 请求超时秒数 |
+    | `ENABLE_WORD_CORRECTION` | false | 启用 DOCX/DOC |
+    | `ENABLE_TEST_MODE` | false | 内置假纠错结果 |
+    | `TOOL_MAX_TURNS` | 20 | 一份 000.txt 最多来回几轮 |
+  version: 0.4.0
+  contact:
+    name: text-correction
+
+servers:
+  - url: http://127.0.0.1:32546
+    description: 本地开发
+  - url: http://localhost:32546
+    description: 本地开发（localhost）
+  - url: '{scheme}://{host}:{port}'
+    description: 自定义环境
+    variables:
+      scheme:
+        default: http
+        enum: [http, https]
+      host:
+        default: 127.0.0.1
+      port:
+        default: '32546'
+
+tags:
+  - name: 系统
+    description: 健康检查与服务信息
+  - name: 文本纠错
+    description: 单条文本纠错
+  - name: 文档纠错
+    description: PDF/Word 文档批量纠错
+  - name: 合同审查
+    description: DOCX 合同模板填空字段审查
+  - name: 对外接口
+    description: 给外部系统调的单入口（文本或文件），返回结果页链接
+  - name: 结果页
+    description: 结果页要展示的原文 PDF（站点前端用）
+  - name: 纠错记录
+    description: 纠错记录的增删改查（站点前端用；没配 MYSQL_DSN 时回 503）
+
+paths:
+  /health:
+    get:
+      tags: [系统]
+      summary: 轻量存活检查
+      description: 只返回进程状态与配置，不连模型、不消耗 token；容器健康检查每 30 秒调一次。模型链路请手动调 /health/correction。
+      operationId: getHealth
+      x-apifox-folder: 系统
+      x-apifox-status: released
+      responses:
+        '200':
+          description: 进程存活且配置齐全
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                model: qwen3.5-27b
+                base_url: https://llm.example.com/v1
+                max_text_length: 3000
+                uptime_seconds: 3821
+
+  /health/correction:
+    get:
+      tags: [系统]
+      summary: 纠错链路健康检查
+      description: 使用内置约 50 字文本跑一次完整纠错链路。正常返回时 status 为 ok；模型是否纠出预期错字不作为健康判定条件。
+      operationId: getHealthCorrection
+      x-apifox-folder: 系统
+      x-apifox-status: released
+      responses:
+        '200':
+          description: 纠错链路执行完成；status 为 ok 或 error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorrectionHealthResponse'
+              example:
+                status: ok
+                elapsed_ms: 12427
+                test_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承但违约责任，并赔偿乙方因此产生的全部损失。
+                error_count: 1
+                matched_count: 1
+                expected_count: 1
+                checks:
+                  - original: 承但
+                    expected: 承担
+                    matched: true
+                errors:
+                  - position: 25
+                    original_char: 但
+                    correct_char: 担
+                    tag: replace
+                correct_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承担违约责任，并赔偿乙方因此产生的全部损失。
+
+  /config:
+    get:
+      tags: [系统]
+      summary: 前端能力开关
+      description: |
+        前端一进页面就问它：配没配外部解析服务（DocParser）。配了就把「文本纠错」「文档纠错」
+        两条手工入口收起来，只留「纠错记录」和「链接纠错」——那种部署下纠错主要是外部系统走
+        API 调进来的。
+      operationId: getConfig
+      x-apifox-folder: 系统
+      x-apifox-status: released
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [parse2json]
+                properties:
+                  parse2json:
+                    type: boolean
+                    description: 是否配了外部解析服务（PARSE2JSON_BASE_URL 有值且没被 PARSE2JSON_ENABLED=0 关掉）
+              example:
+                parse2json: true
+
+  /correction_text:
+    post:
+      tags: [文本纠错]
+      summary: 单条/多行文本纠错
+      description: |
+        对单段或含换行的文本进行错别字检测与纠正。
+
+        **NestJS 兼容约定**
+        - 响应体顶层必须有 `results`
+        - `errors` / `wrong_ids` 永为数组，无错时 `[]`
+        - `errors` 为单字粒度
+        - `original_text` 仅去除首尾空白，中间空格保留
+        - 失败返回真实 HTTP 非 2xx
+      operationId: correctionText
+      x-apifox-folder: 文本纠错
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorrectionTextRequest'
+            examples:
+              有错别字:
+                summary: 单字替换
+                value:
+                  content: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承但违约责任。
+              无错文本:
+                summary: 无错别字
+                value:
+                  content: 该项目已通过验收，各项指标符合设计要求。
+      responses:
+        '200':
+          description: 请求成功（含无错、跳过、纠错完成）
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NestJSCorrectionResponse'
+              example:
+                results:
+                  original_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承但违约责任。
+                  correct_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承担违约责任。
+                  wrong_ids: [25]
+                  errors:
+                    - position: 25
+                      original_char: 但
+                      correct_char: 担
+                      tag: replace
+                code: 0
+                data:
+                  results:
+                    original_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承但违约责任。
+                    correct_text: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承担违约责任。
+                    wrong_ids: [25]
+                    errors:
+                      - position: 25
+                        original_char: 但
+                        correct_char: 担
+                        tag: replace
+                messages: 任务完成
+                engine_status: ok
+        '422':
+          description: 请求体参数校验失败
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: 检测到其中有文本超过3000个字，任务失败。
+        '500':
+          description: 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: 任务因未知原因失败
+
+  /correction:
+    post:
+      tags: [文档纠错]
+      summary: PDF/Word 文件纠错
+      description: |
+        上传 PDF 文件提取正文与表格文本后批量纠错；开启 ENABLE_WORD_CORRECTION 后支持 DOCX/DOC。
+
+        **返回说明**
+        - `results` / `data.results` 为数组，仅包含有修改的段落/单元格
+        - `debug=true` 时附加纠错调试数据（渲染后的原文、每一轮的工具调用数与落地数、被拦下的改动）
+      operationId: correctionDocument
+      x-apifox-folder: 文档纠错
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: limit
+          in: query
+          required: false
+          description: 限制处理段落数，0 或不传表示不限制
+          schema:
+            type: integer
+            default: 0
+        - name: debug
+          in: query
+          required: false
+          description: 返回纠错调试数据（渲染后的原文、每一轮的工具调用数与落地数、被拦下的改动）
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF 文件；开启 ENABLE_WORD_CORRECTION 后也支持 DOCX/DOC
+      responses:
+        '200':
+          description: 处理完成
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCorrectionResponse'
+              example:
+                results:
+                  - original_text: 4.2资料的提供和消除
+                    correct_text: 4.2资料的提供和使用
+                    wrong_ids: [9, 10]
+                    errors:
+                      - position: 9
+                        original_char: 消
+                        correct_char: 使
+                        tag: replace
+                      - position: 10
+                        original_char: 除
+                        correct_char: 用
+                        tag: replace
+                code: 0
+                data:
+                  results:
+                    - original_text: 4.2资料的提供和消除
+                      correct_text: 4.2资料的提供和使用
+                      wrong_ids: [9, 10]
+                      errors:
+                        - position: 9
+                          original_char: 消
+                          correct_char: 使
+                          tag: replace
+                        - position: 10
+                          original_char: 除
+                          correct_char: 用
+                          tag: replace
+                messages: 任务完成
+                engine_status: ok
+        '500':
+          description: 文档解析失败或未知异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /openapi/contract-audit/web-correct:
+    post:
+      tags: [对外接口]
+      summary: 对外接口：文本 / 文件纠错，返回结果页链接
+      description: |
+        给外部系统（合同审查那边的网页）用的入口：文本走 `content`、文件走 `file`、
+        文件链接走 `fileUrl`，三个都给时以 `file` 为先、其次是 `fileUrl`。
+
+        **都是表单字段**（`multipart/form-data` 或 `x-www-form-urlencoded`），
+        不是 JSON 请求体——发 JSON、或者把 `content` 放在 URL 查询串里，都会因为
+        「三个都没给」回 400 `content（文本）、file（文件）和 fileUrl（文件链接）至少要给一个`。
+
+        `fileUrl` 一律由我们把文件下载回来（超时 120 秒、上限 50 MB），下完跟直接上传 `file`
+        走同一条链路（Word 等先转 PDF）。**这条接口跟有没有配外部解析服务无关**，一律用本地
+        解析。要走外部解析服务（链接原样转交）用 `/openapi/contract-audit/web-correct-DocParser`。
+
+        **返回说明**
+        - `url`：能直接打开的结果页链接，点开就是本站在结果页看到的那份东西
+        - `record_id`：这条纠错记录的 id，`GET /records/{id}` 取整份
+        - `correction_count`：本次纠了多少处（跟结果页页头同一个口径）
+        - `type` 标明走的是哪条：`file` 时 `results` 是逐段、逐格的纠错差异
+          （带 `?full=true` 就多回全文分段 `blocks` 与页面高亮框 `highlights`）；
+          `text` 时是逐字结果（`original_text` / `correct_text` / `errors`）
+
+        记录库（MySQL）连不上时纠错照常跑，`url` / `record_id` 回 `null`。
+      operationId: webCorrect
+      x-apifox-folder: 对外接口
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: full
+          in: query
+          required: false
+          description: 文件纠错时额外返回全文分段与页面高亮框（结果页链接两路都会给）
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: 待纠错的文本（和 file / fileUrl 三选一）
+                  example: 这是一个纠错温本
+                file:
+                  type: string
+                  format: binary
+                  description: 待纠错的文件（PDF / Word / Excel；和 content / fileUrl 三选一）
+                fileUrl:
+                  type: string
+                  description: 待纠错文件的 http/https 链接，由服务端下载后走和 file 一样的链路（这条接口一律本地解析；和 content / file 三选一）
+                  example: https://example.com/合同.pdf
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: 待纠错的文本（和 file / fileUrl 三选一）
+                  example: 这是一个纠错温本
+                fileUrl:
+                  type: string
+                  description: 待纠错文件的 http/https 链接，由服务端下载后走和 file 一样的链路（这条接口一律本地解析；和 content / file 三选一）
+                  example: https://example.com/合同.pdf
+      responses:
+        '200':
+          description: 处理完成
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebCorrectResponse'
+              example:
+                type: text
+                record_id: 20261016-064530-969495
+                url: http://127.0.0.1:18080/#/result/20261016-064530-969495
+                correction_count: 1
+                results:
+                  original_text: 这是一个纠错温本
+                  correct_text: 这是一个纠错文本
+                  wrong_ids: [6]
+                  errors:
+                    - position: 6
+                      original_char: 温
+                      correct_char: 文
+                      tag: replace
+                code: 0
+                messages: 任务完成
+                engine_status: ok
+        '400':
+          description: content / file / fileUrl 都没给，或 fileUrl 取不回来
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: content（文本）、file（文件）和 fileUrl（文件链接）至少要给一个
+        '500':
+          description: 文档解析失败或未知异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /openapi/contract-audit/web-correct-DocParser:
+    post:
+      tags: [对外接口]
+      summary: 对外接口 DocParser：只收文件链接（配了解析服务时原样转交）
+      description: |
+        参数、返回和 `/openapi/contract-audit/web-correct` **完全一样**，区别是走不走外部解析服务：
+
+        - 配了外部解析服务时，三路都交给它：`fileUrl` **原样转交**（我们不下载、不转格式，它自己
+          去取、自己判格式，报什么错比如「这个链接不是 PDF」就原样回给调用方，HTTP `400` + 它的
+          `errorCode`）；上传的 `file` 先存一份，再给它一个够得着的地址。
+        - 没配外部解析服务时，跟原接口一样走本地那套（链接由我们下载，超时 120 秒、上限 50 MB）。
+
+        其余参数、返回字段见原接口那节。
+      operationId: webCorrectDocParser
+      x-apifox-folder: 对外接口
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: full
+          in: query
+          required: false
+          description: 文件纠错时额外回全文分段 blocks 与页面高亮框 highlights；默认 false
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                fileUrl:
+                  type: string
+                  description: 待纠错文件的 http/https 链接；配了外部解析服务时原样转交给它（必填，DocParser 接口只收链接）
+                  example: https://example.com/合同.pdf
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                fileUrl:
+                  type: string
+                  description: 待纠错文件的 http/https 链接；配了外部解析服务时原样转交给它（必填，DocParser 接口只收链接）
+                  example: https://example.com/合同.pdf
+      responses:
+        '200':
+          description: 处理完成
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: content / file / fileUrl 都没给，或解析服务判定链接有问题
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                detail: 外部解析服务解析失败：The provided URL does not point to a PDF file（errorCode=40010）
+        '500':
+          description: 文档解析失败或未知异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /review_contract:
+    post:
+      tags: [合同审查]
+      summary: DOCX 合同字段审查
+      description: |
+        上传 DOCX/DOC 合同模板文件，自动提取占位符字段并逐项审查。
+
+        **占位符类型**：text / select / number / percent / date / amount
+      operationId: reviewContract
+      x-apifox-folder: 合同审查
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: DOCX 或 DOC 合同模板文件
+      responses:
+        '200':
+          description: 处理完成
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractReviewResponse'
+              example:
+                results:
+                  - approved: true
+                    reason: 未发现文字错误
+                    severity: info
+                    field_index: 0
+                    field_name: 项目名称
+                    field_type: text
+                    paragraph_index: 149
+                code: 0
+                data:
+                  results:
+                    - approved: true
+                      reason: 未发现文字错误
+                      severity: info
+                      field_index: 0
+                      field_name: 项目名称
+                      field_type: text
+                      paragraph_index: 149
+                messages: 任务完成
+                engine_status: ok
+        '500':
+          description: 文件解析失败或未知异常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /document/{doc_id}:
+    get:
+      tags: [结果页]
+      summary: 取结果页要展示的原文 PDF
+      description: |
+        结果页拿这个地址当 PDF 阅读器的数据源：浏览器按需取字节、一页页画出来，改动的高亮框再按坐标贴上去。
+        支持 `Range`（PDF.js 靠它渐进加载，命中时回 `206`）；配了对象存储对外地址时回 `307`
+        重定向到带签名的临时地址，浏览器直连对象存储、后端一个字节都不搬。
+      operationId: getDocument
+      x-apifox-folder: 结果页
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: doc_id
+          in: path
+          required: true
+          description: 32 位十六进制文档 id（从 `/correction?full=true` 或 `GET /records/{id}` 的 `doc.docId` 拿）
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{32}$'
+            example: 1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+      responses:
+        '200':
+          description: PDF 字节流
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: 文档不存在或已过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /records:
+    get:
+      tags: [纠错记录]
+      summary: 纠错记录列表
+      description: |
+        按时间倒序，**不带全文**——只回列表页要显示的那几列，结果页再按 id 取整份。
+        没配 `MYSQL_DSN` 时回 `503`。
+      operationId: listRecords
+      x-apifox-folder: 纠错记录
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: limit
+          in: query
+          required: false
+          description: 一页多少条
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: 从第几条开始
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: 记录列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordListResponse'
+        '503':
+          description: 纠错记录存储（MySQL）没配或连不上
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [纠错记录]
+      summary: 存一条纠错记录
+      description: |
+        前端纠错完成后调这个，拿到 `id` 再跳结果页 `#/result/<id>`。
+        同一个 `id` 再存一次是**覆盖**（用来把浏览器里的老记录导进来）。
+      operationId: saveRecord
+      x-apifox-folder: 纠错记录
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordModel'
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordSavedResponse'
+        '503':
+          description: 纠错记录存储（MySQL）没配或连不上
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /records/{record_id}:
+    get:
+      tags: [纠错记录]
+      summary: 取一条记录的整份内容
+      description: 结果页靠它——换台机器打开同一个链接也看得到。
+      operationId: getRecord
+      x-apifox-folder: 纠错记录
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/RecordId'
+      responses:
+        '200':
+          description: 整份记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordResponse'
+        '404':
+          description: 这条纠错记录不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [纠错记录]
+      summary: 删一条记录
+      description: 它引用的原文要是没有别的记录再用，顺手把对象存储里那份和本机缓存那份一起清掉。
+      operationId: deleteRecord
+      x-apifox-folder: 纠错记录
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/RecordId'
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                    example: true
+        '404':
+          description: 这条纠错记录不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /records/{record_id}/ignored:
+    put:
+      tags: [纠错记录]
+      summary: 标记 / 恢复误报
+      description: 按处号标记哪些是误报、不用改；传空数组就是全部恢复。
+      operationId: setRecordIgnored
+      x-apifox-folder: 纠错记录
+      x-apifox-status: released
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/RecordId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IgnoredModel'
+      responses:
+        '200':
+          description: 最新的误报清单
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ignored:
+                    type: array
+                    nullable: true
+                    description: 一个都不剩的时候回 null
+                    items:
+                      type: integer
+                    example: [3, 7]
+components:
+  parameters:
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: 可选请求追踪 ID，响应头会原样回传
+      schema:
+        type: string
+        example: a1b2c3d4e5f6
+    RecordId:
+      name: record_id
+      in: path
+      required: true
+      description: 纠错记录 id（形如 20261016-120000-ab12cd）
+      schema:
+        type: string
+        pattern: '^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$'
+        example: 20261016-120000-ab12cd
+  headers:
+    RequestId:
+      description: 请求追踪 ID
+      schema:
+        type: string
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, model, base_url, max_text_length, uptime_seconds]
+      properties:
+        status:
+          type: string
+          description: 固定 ok；进程起不来时请求本身就失败
+          example: ok
+        model:
+          type: string
+          example: qwen3.5-27b
+        base_url:
+          type: string
+          example: https://llm.example.com/v1
+        max_text_length:
+          type: integer
+          example: 3000
+          description: 分片粒度：单次送给模型的分片字数上限（不是请求拒绝阈值）
+        uptime_seconds:
+          type: integer
+          description: 进程已运行秒数
+          example: 3821
+
+    CorrectionHealthResponse:
+      type: object
+      required: [status, elapsed_ms, test_text, error_count, matched_count, expected_count, checks, errors, correct_text]
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+          description: 正常返回为 ok；内部异常为 error
+        elapsed_ms:
+          type: integer
+        test_text:
+          type: string
+        error_count:
+          type: integer
+        matched_count:
+          type: integer
+        expected_count:
+          type: integer
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              original:
+                type: string
+              expected:
+                type: string
+              matched:
+                type: boolean
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorrectionError'
+        correct_text:
+          type: string
+
+    CorrectionTextRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          description: 待纠错文本；长度不限，超过 MAX_TEXT_LENGTH 会在句末切分后分片并发纠错；仅去除首尾空白，中间空格保留
+          example: 甲方应按合同约定向乙方支付货款，逾期未支付的，应承但违约责任。
+
+    CorrectionError:
+      type: object
+      required: [position, original_char, correct_char, tag]
+      properties:
+        position:
+          type: integer
+          minimum: 0
+          description: 错误在 original_text 中的字符索引，从 0 开始
+          example: 25
+        original_char:
+          type: string
+          maxLength: 1
+          description: 原文字符；insert 时为空字符串
+          example: 但
+        correct_char:
+          type: string
+          maxLength: 1
+          description: 纠正字符；delete 时为空字符串
+          example: 担
+        tag:
+          type: string
+          enum: [replace, insert, delete]
+
+    CorrectionResult:
+      type: object
+      required: [original_text, correct_text, wrong_ids, errors]
+      properties:
+        original_text:
+          type: string
+          description: 仅去除首尾空白的原文
+        correct_text:
+          type: string
+          description: 纠错后文本
+        wrong_ids:
+          type: array
+          description: 错误字符位置索引（去重升序）
+          items:
+            type: integer
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorrectionError'
+
+    NestJSCorrectionResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          $ref: '#/components/schemas/CorrectionResult'
+        code:
+          type: integer
+          example: 0
+        data:
+          type: object
+          properties:
+            results:
+              $ref: '#/components/schemas/CorrectionResult'
+        messages:
+          type: string
+          example: 任务完成
+        engine_status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+
+    BatchCorrectionResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorrectionResult'
+        code:
+          type: integer
+          example: 0
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/CorrectionResult'
+        messages:
+          type: string
+          example: 任务完成
+        engine_status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+
+    WebCorrectResponse:
+      type: object
+      required: [code, messages, engine_status]
+      properties:
+        type:
+          type: string
+          enum: [text, file]
+          description: 这次走的是哪条：text=传的文本，file=传的文件
+          example: text
+        record_id:
+          type: string
+          nullable: true
+          description: 纠错记录 id；记录库连不上时为 null
+          example: 20261016-064530-969495
+        url:
+          type: string
+          nullable: true
+          description: 能直接打开的结果页链接；记录库连不上时为 null
+          example: http://127.0.0.1:18080/#/result/20261016-064530-969495
+        correction_count:
+          type: integer
+          description: |
+            本次纠了多少**处**。「处」不等于「字」：相邻的同类改动会合成一处（连着改几个字算一处、
+            连着删几个字算一处、同一位置补几个字算一处），所以它跟 `results[].errors` 的条数不一定
+            相等；有 `highlights` 时它就是 `highlights` 的长度。
+          example: 13
+        results:
+          description: type=text 时是单个对象，type=file 时是数组（逐段、逐格，只含有改动的段）
+          oneOf:
+            - $ref: '#/components/schemas/CorrectionResult'
+            - type: array
+              items:
+                $ref: '#/components/schemas/CorrectionResult'
+        blocks:
+          type: array
+          description: 仅 `?full=true` 时返回：按正文顺序的全文分段（段落与表格单元格交错），结果页拿它铺全文
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [p, row]
+                description: p=普通段落，row=表格单元格
+              text:
+                type: string
+                description: 该段 / 该格的原文
+              errors:
+                type: array
+                description: 该段 / 该格的改动，形状同 CorrectionError
+                items:
+                  $ref: '#/components/schemas/CorrectionError'
+              wrong_ids:
+                type: array
+                description: 该段 / 该格有改动的字符下标，去重升序
+                items:
+                  type: integer
+              table:
+                type: integer
+                description: 只有表格格有：第几张表，从 0 起（跨表唯一）
+              row:
+                type: integer
+                description: 只有表格格有：行号，从 0 起
+              col:
+                type: integer
+                description: 只有表格格有：列号，从 0 起
+              colspan:
+                type: integer
+                description: 只有表格格有：横向合并了几列，不合并是 1
+              rowspan:
+                type: integer
+                description: 只有表格格有：纵向合并了几行，不合并是 1；被竖合并盖住的续格不在这里出现
+        highlights:
+          type: array
+          description: 仅 `?full=true` 时返回：改动贴在页面哪儿；处数就是它的长度
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+                description: 处号，从 0 起，跟结果页清单的顺序一一对应
+              page:
+                type: integer
+                description: 在第几页，从 0 起
+              tag:
+                type: string
+                enum: [replace, insert, delete]
+              rects:
+                type: array
+                description: |
+                  框在页面上的位置，每个框是 `[x0, y0, x1, y1]`（PDF 页面坐标系，点是 1/72 英寸，
+                  原点在左上、y 向下）；一个改动跨行时会是多个框
+                items:
+                  type: array
+                  items:
+                    type: number
+                  minItems: 4
+                  maxItems: 4
+              original:
+                type: string
+                description: 改动前的内容；insert 时为空字符串
+              corrected:
+                type: string
+                description: 改动后的内容；delete 时为空字符串
+        doc_id:
+          type: string
+          description: 仅 `?full=true` 时返回：原文 PDF 的 id（32 位十六进制），配 `GET /document/{doc_id}` 取
+          example: 1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+        pdf_url:
+          type: string
+          description: 仅 `?full=true` 时返回：就是 `/document/{doc_id}`，相对地址
+          example: /document/1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+        source_kind:
+          type: string
+          enum: [pdf, office]
+          description: 仅 `?full=true` 时返回：pdf=上传的本来就是 PDF，office=Office 转出来的那份
+          example: pdf
+        timings:
+          type: object
+          description: 仅 `?full=true` 时返回：各阶段耗时（毫秒）
+          properties:
+            convert_ms:
+              type: integer
+              description: Office 转 PDF 花了多久（上传的是 PDF 时为 0）
+            parse_ms:
+              type: integer
+              description: 解析花了多久（取正文 + 表格单元格）
+            correct_ms:
+              type: integer
+              description: 纠错花了多久（模型那一段）
+            total_ms:
+              type: integer
+              description: 从收到文件到出结果的总耗时
+        code:
+          type: integer
+          example: 0
+        data:
+          type: object
+          description: 跟顶层 results 同一份（兼容老调用方的写法）
+          properties:
+            results:
+              description: 跟顶层 results 同一份
+        messages:
+          type: string
+          example: 任务完成
+        engine_status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+
+    ContractReviewResult:
+      type: object
+      required: [approved, reason, severity, field_index, field_name, field_type, paragraph_index]
+      properties:
+        approved:
+          type: boolean
+          description: true=通过，false=有风险
+          example: true
+        reason:
+          type: string
+          description: 审查理由
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        field_index:
+          type: integer
+        field_name:
+          type: string
+        field_type:
+          type: string
+          enum: [text, select, number, percent, date, amount]
+        paragraph_index:
+          type: integer
+          description: 所在段落下标；非段落字段为 -1
+        table_location:
+          type: string
+          nullable: true
+          description: 表格位置描述，仅表格内字段有
+
+    ContractReviewResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractReviewResult'
+        code:
+          type: integer
+          example: 0
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContractReviewResult'
+        messages:
+          type: string
+          example: 任务完成
+        engine_status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+
+    RecordSummary:
+      type: object
+      description: 记录列表那一行的形状（不带全文）
+      properties:
+        id:
+          type: string
+          example: 20261016-093605-8eedbf
+        kind:
+          type: string
+          description: file / text
+          example: file
+        filename:
+          type: string
+          example: 货物零星采购合同（2025年版）.docx
+        engineStatus:
+          type: string
+          description: ok / degraded
+          example: ok
+        correctionCount:
+          type: integer
+          description: 纠了多少处
+          example: 12
+        unitsWithCorrection:
+          type: integer
+          description: 涉及多少段 / 单元格
+          example: 7
+        createdAt:
+          type: string
+          description: 入库时间（UTC）
+          example: '2026-10-16T09:36:05Z'
+        timings:
+          type: object
+          nullable: true
+          description: 转换 / 解析 / 纠错 / 总耗时（毫秒），没有的段不回
+          properties:
+            convertMs:
+              type: integer
+              example: 3800
+            parseMs:
+              type: integer
+              example: 668
+            correctMs:
+              type: integer
+              example: 41000
+            totalMs:
+              type: integer
+              example: 45500
+        hasDoc:
+          type: boolean
+          description: 有没有可展示的原文（有就能取 /document/{docId}）
+          example: true
+
+    RecordListResponse:
+      type: object
+      required: [records, total, storage]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordSummary'
+        total:
+          type: integer
+          example: 31
+        storage:
+          type: string
+          example: mysql
+
+    RecordModel:
+      type: object
+      description: 交上来存的那份数据（结果页要用的整份）
+      properties:
+        id:
+          type: string
+          description: 可选；不传服务端生成。传了就沿用（把浏览器里的老记录导进来）
+          example: 20261016-120000-ab12cd
+        kind:
+          type: string
+          description: file（默认）/ text
+          example: file
+        filename:
+          type: string
+          example: 货物零星采购合同（2025年版）.docx
+        engineStatus:
+          type: string
+          description: ok（默认）/ degraded
+          example: ok
+        correctionCount:
+          type: integer
+          example: 12
+        unitsWithCorrection:
+          type: integer
+          example: 7
+        timings:
+          type: object
+          nullable: true
+          properties:
+            convertMs:
+              type: integer
+            parseMs:
+              type: integer
+            correctMs:
+              type: integer
+            totalMs:
+              type: integer
+        units:
+          type: array
+          description: 逐段、逐格的纠错结果（结果页正文用），结构由前端渲染决定，原样存
+          items:
+            type: object
+        blocks:
+          type: array
+          nullable: true
+          description: 按正文顺序的全文分段
+          items:
+            type: object
+        highlights:
+          type: array
+          nullable: true
+          description: 改动贴在页面哪儿
+          items:
+            type: object
+        doc:
+          type: object
+          nullable: true
+          description: 原文信息；docId 是 32 位 hex，指向 /document/{docId}
+          properties:
+            docId:
+              type: string
+              example: 1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+            sourceKind:
+              type: string
+              example: pdf
+            pdfUrl:
+              type: string
+              example: /document/1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+
+    RecordSavedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 20261016-120000-ab12cd
+        createdAt:
+          type: string
+          example: '2026-10-16T12:00:00Z'
+        storage:
+          type: string
+          example: mysql
+
+    RecordResponse:
+      type: object
+      required: [record, storage]
+      properties:
+        record:
+          allOf:
+            - $ref: '#/components/schemas/RecordSummary'
+            - type: object
+              properties:
+                units:
+                  type: array
+                  items:
+                    type: object
+                blocks:
+                  type: array
+                  nullable: true
+                  items:
+                    type: object
+                highlights:
+                  type: array
+                  nullable: true
+                  items:
+                    type: object
+                ignored:
+                  type: array
+                  nullable: true
+                  description: 被标为误报的处号，空的时候回 null
+                  items:
+                    type: integer
+                doc:
+                  type: object
+                  nullable: true
+                  properties:
+                    docId:
+                      type: string
+                    sourceKind:
+                      type: string
+                    pdfUrl:
+                      type: string
+                      description: 相对地址，谁打开就按自己的服务地址去取
+                      example: /document/1f0c9a3b7d2e4f5a6b8c9d0e1f2a3b4c
+        storage:
+          type: string
+          example: mysql
+
+    IgnoredModel:
+      type: object
+      required: [ignored]
+      properties:
+        ignored:
+          type: array
+          description: 被标为误报的处号；传空数组就是全部恢复
+          items:
+            type: integer
+          example: [3, 7]
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: 错误说明
+          example: 任务因未知原因失败
