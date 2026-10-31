@@ -71,10 +71,10 @@ docker compose down -v               # 停止并清空数据，慎用
 
 ## 部署目录长什么样
 
-服务器上就一个目录，所有东西都放在里面（例如 `/data/fgg/text-correction`）：
+服务器上就一个目录，所有东西都放在里面（例如 `/data/text-correction`）：
 
 ```
-/data/fgg/text-correction/
+/data/text-correction/
 ├── docker-compose.yml    五个容器的编排
 ├── .env                  配置：镜像、模型、端口、口令、数据目录
 ├── images/               三个官方镜像的 tar（离线装机用，装完可以删；联网拉的话不用传）
